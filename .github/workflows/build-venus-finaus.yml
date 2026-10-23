@@ -30,7 +30,6 @@ jobs:
           git clone --depth 1 --branch "${{ inputs.ksu_ref || 'master' }}" \
             https://github.com/LyraVoid/FinaSU.git kernel/KernelSU
           echo "FinaSU HEAD: $(git -C kernel/KernelSU rev-parse --short HEAD)"
-          ls kernel/KernelSU
 
       - name: Free disk space
         run: |
@@ -45,20 +44,25 @@ jobs:
             libelf-dev bc zip unzip python3 cpio rsync device-tree-compiler \
             git curl wget xz-utils liblz4-tool
 
-      - name: Download Clang (prebuilt from AOSP)
+      - name: Download Clang (ZyCromerZ mirror, runs on GitHub CDN)
         run: |
           mkdir -p $HOME/toolchain
           cd $HOME/toolchain
-          curl -sSL --retry 3 -o clang.tar.gz \
-            https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r522817.tar.gz
+          curl -sSL --retry 5 --retry-delay 5 -o clang.tar.gz \
+            https://github.com/ZyCromerZ/Clang/releases/download/14.0.6-20261022-release/Clang-14.0.6-20261022.tar.gz
           tar -xzf clang.tar.gz
-          rm clang.tar.gz
-          ls
+          rm -f clang.tar.gz
+          ls -d */
+          find . -maxdepth 3 -name clang -type f | head -5
+          TCDIR=$(dirname "$(find . -maxdepth 3 -name clang -type f | head -1)")
+          echo "Toolchain bin: $HOME/toolchain/$TCDIR"
+          echo "TCBIN=$HOME/toolchain/$TCDIR" >> $GITHUB_ENV
+          "$HOME/toolchain/$TCDIR/clang" --version
 
       - name: Build kernel
         run: |
           cd kernel
-          export PATH=$HOME/toolchain/bin:$PATH
+          export PATH="$TCBIN:$PATH"
           export ARCH=arm64
           export SUBARCH=arm64
           export LLVM=1
@@ -71,10 +75,10 @@ jobs:
           export OBJDUMP=llvm-objdump
           export STRIP=llvm-strip
           export READELF=llvm-readelf
+          clang --version
 
           make -j$(nproc) O=out venus_defconfig
 
-          # 确保 SUSFS 与 KSU 被打开
           ./scripts/config --file out/.config \
             --enable KSU \
             --enable KSU_SUSFS \
@@ -105,9 +109,9 @@ jobs:
           (cd artifact && sha256sum Image > Image.sha256)
           echo "--- kernel version string ---"
           strings artifact/Image | grep -m3 'Linux version' || true
-          echo "--- build info ---" >> artifact/build-info.txt
-          uname -a >> artifact/build-info.txt
-          dtc --version >> artifact/build-info.txt 2>/dev/null || true
+          echo "--- build info ---"
+          uname -a
+          "$TCBIN/clang" --version | head -2
 
       - name: Upload artifact
         if: ${{ (inputs.publish || 'artifact') != 'none' }}
