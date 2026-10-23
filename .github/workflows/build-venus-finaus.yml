@@ -84,7 +84,9 @@ jobs:
 
           make -j$(nproc) O=out venus_defconfig
 
+          # FinaSU Kconfig: config KSU depends on KPROBES && EXT4_FS
           ./scripts/config --file out/.config \
+            --enable KPROBES \
             --enable KSU \
             --enable KSU_SUSFS \
             --enable KSU_SUSFS_SUS_PATH \
@@ -101,7 +103,24 @@ jobs:
           make -j$(nproc) O=out olddefconfig
 
           echo "=== SUSFS / KSU config check ==="
-          grep -E 'CONFIG_KSU|CONFIG_SUSFS' out/.config || true
+          grep -E 'CONFIG_KSU|CONFIG_SUSFS|CONFIG_KPROBES|CONFIG_THREAD_INFO' out/.config || true
+
+          # hard gate: never ship a kernel without KernelSU + SUSFS
+          MISSING=0
+          for sym in CONFIG_KSU CONFIG_KSU_SUSFS CONFIG_KSU_SUSFS_SUS_PATH \
+                     CONFIG_KSU_SUSFS_SUS_MOUNT CONFIG_KSU_SUSFS_SUS_MAP \
+                     CONFIG_KSU_SUSFS_OPEN_REDIRECT CONFIG_KPROBES; do
+            if ! grep -qx "$sym=y" out/.config; then
+              echo "::error::$sym=y is missing from out/.config"
+              MISSING=1
+            fi
+          done
+          if [ "$MISSING" -ne 0 ]; then
+            echo "--- dependency diagnostics ---"
+            grep -E '^CONFIG_(KPROBES|EXT4_FS|THREAD_INFO_IN_TASK|MODULES)' out/.config || true
+            exit 1
+          fi
+          echo "KSU/SUSFS config gate: PASS"
 
           make -j$(nproc) O=out Image Image.gz dtbs
 
