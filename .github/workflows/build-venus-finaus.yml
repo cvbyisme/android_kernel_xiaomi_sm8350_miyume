@@ -31,6 +31,19 @@ jobs:
             https://github.com/LyraVoid/FinaSU.git kernel/KernelSU
           echo "FinaSU HEAD: $(git -C kernel/KernelSU rev-parse --short HEAD)"
 
+      - name: Patch FinaSU for Linux 5.4 compatibility
+        run: |
+          # linux/pgtable.h only exists since Linux 5.8; on 5.4 its contents
+          # come from <linux/mm.h> / <asm/pgtable.h>. Drop the bogus include.
+          F=kernel/KernelSU/kernel/feature/sucompat.c
+          if grep -qx '#include <linux/pgtable.h>' "$F"; then
+            sed -i 's|^#include <linux/pgtable.h>$|#include <asm/pgtable.h> /* 5.4 compat: linux/pgtable.h is 5.8+ */|' "$F"
+            echo "patched: $F"
+          else
+            echo "::warning::pgtable include not found in sucompat.c (already patched upstream?)"
+          fi
+          grep -n 'pgtable' "$F" || true
+
       - name: Free disk space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
