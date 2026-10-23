@@ -1,0 +1,118 @@
+name: Build venus kernel with FinaSU
+
+on:
+  workflow_dispatch:
+    inputs:
+      ksu_ref:
+        description: 'FinaSU git ref'
+        required: false
+        default: 'master'
+      publish:
+        description: 'release | artifact | none'
+        required: false
+        default: 'artifact'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout kernel
+        uses: actions/checkout@v4
+        with:
+          path: kernel
+          fetch-depth: 1
+          submodules: false
+
+      - name: Clone FinaSU into KernelSU/ (replaces ReSukiSU submodule)
+        run: |
+          rm -rf kernel/KernelSU
+          git clone --depth 1 --branch "${{ inputs.ksu_ref || 'master' }}" \
+            https://github.com/LyraVoid/FinaSU.git kernel/KernelSU
+          echo "FinaSU HEAD: $(git -C kernel/KernelSU rev-parse --short HEAD)"
+          ls kernel/KernelSU
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
+          df -h /
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq build-essential flex bison libssl-dev \
+            libelf-dev bc zip unzip python3 cpio rsync device-tree-compiler \
+            git curl wget xz-utils liblz4-tool
+
+      - name: Download Clang (prebuilt from AOSP)
+        run: |
+          mkdir -p $HOME/toolchain
+          cd $HOME/toolchain
+          curl -sSL --retry 3 -o clang.tar.gz \
+            https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r522817.tar.gz
+          tar -xzf clang.tar.gz
+          rm clang.tar.gz
+          ls
+
+      - name: Build kernel
+        run: |
+          cd kernel
+          export PATH=$HOME/toolchain/bin:$PATH
+          export ARCH=arm64
+          export SUBARCH=arm64
+          export LLVM=1
+          export LLVM_IAS=1
+          export CC=clang
+          export LD=ld.lld
+          export AR=llvm-ar
+          export NM=llvm-nm
+          export OBJCOPY=llvm-objcopy
+          export OBJDUMP=llvm-objdump
+          export STRIP=llvm-strip
+          export READELF=llvm-readelf
+
+          make -j$(nproc) O=out venus_defconfig
+
+          # 确保 SUSFS 与 KSU 被打开
+          ./scripts/config --file out/.config \
+            --enable KSU \
+            --enable KSU_SUSFS \
+            --enable KSU_SUSFS_SUS_PATH \
+            --enable KSU_SUSFS_SUS_MOUNT \
+            --enable KSU_SUSFS_SUS_KSTAT \
+            --enable KSU_SUSFS_SPOOF_UNAME \
+            --enable KSU_SUSFS_ENABLE_LOG \
+            --enable KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS \
+            --enable KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG \
+            --enable KSU_SUSFS_OPEN_REDIRECT \
+            --enable KSU_SUSFS_SUS_MAP \
+            --enable KSU_DYNAMIC_MANAGER
+
+          make -j$(nproc) O=out olddefconfig
+
+          echo "=== SUSFS / KSU config check ==="
+          grep -E 'CONFIG_KSU|CONFIG_SUSFS' out/.config || true
+
+          make -j$(nproc) O=out Image Image.gz dtbs
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p artifact
+          cp kernel/out/arch/arm64/boot/Image artifact/Image
+          cp kernel/out/arch/arm64/boot/Image.gz artifact/Image.gz || true
+          cp kernel/out/.config artifact/kernel.config
+          (cd artifact && sha256sum Image > Image.sha256)
+          echo "--- kernel version string ---"
+          strings artifact/Image | grep -m3 'Linux version' || true
+          echo "--- build info ---" >> artifact/build-info.txt
+          uname -a >> artifact/build-info.txt
+          dtc --version >> artifact/build-info.txt 2>/dev/null || true
+
+      - name: Upload artifact
+        if: ${{ (inputs.publish || 'artifact') != 'none' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: venus-finaus-kernel
+          path: artifact/*
+          if-no-files-found: error
