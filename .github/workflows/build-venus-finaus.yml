@@ -53,11 +53,16 @@ jobs:
           tar -xzf clang.tar.gz
           rm -f clang.tar.gz
           ls -d */
-          find . -maxdepth 3 -name clang -type f | head -5
-          TCDIR=$(dirname "$(find . -maxdepth 3 -name clang -type f | head -1)")
-          echo "Toolchain bin: $HOME/toolchain/$TCDIR"
-          echo "TCBIN=$HOME/toolchain/$TCDIR" >> $GITHUB_ENV
-          "$HOME/toolchain/$TCDIR/clang" --version
+          CLANG_BIN=$(find "$HOME/toolchain" -maxdepth 4 -name clang \( -type f -o -type l \) | head -1)
+          if [ -z "$CLANG_BIN" ]; then
+            echo "::error::clang binary not found in toolchain tarball"
+            find "$HOME/toolchain" -maxdepth 3 | head -30
+            exit 1
+          fi
+          TCDIR=$(dirname "$CLANG_BIN")
+          echo "Toolchain bin: $TCDIR"
+          echo "TCBIN=$TCDIR" >> $GITHUB_ENV
+          "$TCDIR/clang" --version
 
       - name: Build kernel
         run: |
