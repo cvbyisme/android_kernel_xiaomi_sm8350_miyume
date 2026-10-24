@@ -194,6 +194,32 @@ for T in "$SUDIR/manager/dynamic_manager.c" \
     echo "TWA_* -> bool: ${T#$KDIR/}"
   fi
 done
+echo "=== [SUSFS] step 4c: seccomp.filter_count / seccomp_filter_release are 5.9+ ==="
+APF="$SUDIR/policy/app_profile.c"
+if [ -f "$APF" ] && grep -q 'filter_count' "$APF"; then
+  python3 - "$APF" <<'APFEOF'
+import io, sys
+p = sys.argv[1]
+lines = io.open(p, encoding='utf-8').read().split(chr(10))
+out = []
+for l in lines:
+    if 'seccomp.filter_count' in l:
+        out.append('#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)')
+        out.append(l)
+        out.append('#endif')
+    elif l.strip() == 'seccomp_filter_release(fake);':
+        ind = l[:len(l) - len(l.lstrip())]
+        out.append('#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 9, 0)')
+        out.append(l)
+        out.append('#else')
+        out.append(ind + 'put_seccomp_filter(fake);')
+        out.append('#endif')
+    else:
+        out.append(l)
+io.open(p, 'w', encoding='utf-8').write(chr(10).join(out))
+print('app_profile.c seccomp 5.4 guards added')
+APFEOF
+fi
 echo "=== [SUSFS] step 5: 5.4 has no seccomp syscall cache (added in 5.9) ==="
 SCC="$SUDIR/infra/seccomp_cache.c"
 if [ -f "$SCC" ] && ! grep -q ksu54_seccomp_stub "$SCC"; then
