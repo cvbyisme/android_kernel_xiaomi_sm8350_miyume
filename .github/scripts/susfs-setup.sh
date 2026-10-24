@@ -60,6 +60,13 @@ cat > include/linux/ksu54_compat.h <<'C54'
 #include <linux/highmem.h>
 #include <linux/errno.h>
 #include <linux/string.h>
+/* 5.4 does not have <linux/static_key.h>/<linux/task_work.h>/<linux/hex.h>;
+ * their declarations all live in <linux/jump_label.h>, <linux/sched/task.h>
+ * and <linux/kernel.h> respectively on 5.4.
+ */
+#include <linux/jump_label.h>
+#include <linux/sched/task.h>
+#include <linux/kernel.h>
 /* <linux/pgtable.h> only exists since Linux 5.8 */
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0)
 #include <asm/pgtable.h>
@@ -136,6 +143,24 @@ static inline int ksu54_copy_to_kernel_nofault(void *dst, const void *src,
 	ksu54_copy_to_kernel_nofault((void *)(dst), (const void *)(src), (size_t)(n))
 #endif /* < 5.8 */
 
+/* <linux/minmax.h> was split out of <linux/kernel.h> only in Linux 5.10 */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0)
+#ifndef min_t
+#define min_t(type, x, y) ({ type __min1 = (x); type __min2 = (y); __min1 < __min2 ? __min1 : __min2; })
+#endif
+#ifndef max_t
+#define max_t(type, x, y) ({ type __max1 = (x); type __max2 = (y); __max1 > __max2 ? __max1 : __max2; })
+#endif
+#ifndef min
+#define min(x, y) ({ __typeof__(x) __m1 = (x); __typeof__(y) __m2 = (y); __m1 < __m2 ? __m1 : __m2; })
+#endif
+#ifndef max
+#define max(x, y) ({ __typeof__(x) __M1 = (x); __typeof__(y) __M2 = (y); __M1 > __M2 ? __M1 : __M2; })
+#endif
+#ifndef clamp
+#define clamp(v, lo, hi) ({ __typeof__(v) __c = (v); __typeof__(lo) __l = (lo); __typeof__(hi) __h = (hi); __c < __l ? __l : (__c > __h ? __h : __c); })
+#endif
+#endif /* < 5.10 */
 #endif /* _KSU54_COMPAT_H */
 C54
 echo "written include/linux/ksu54_compat.h"
@@ -184,6 +209,14 @@ for G in "$SUDIR/runtime/ksud_integration.c" \
   fi
 done
 
+echo "=== [SUSFS] step 4a-hdr: strip 5.10+/6.x-only <linux/*.h> includes (minmax/hex/static_key/task_work) ==="
+for G in $(grep -rl "#include <linux/minmax.h>\|#include <linux/hex.h>\|#include <linux/static_key.h>\|#include <linux/task_work.h>" "$SUDIR" --include=*.c --include=*.h 2>/dev/null); do
+  sed -i "/^#include <linux\/minmax.h>$/d; /^#include <linux\/hex.h>$/d; /^#include <linux\/static_key.h>$/d; /^#include <linux\/task_work.h>$/d" "$G"
+  if ! grep -q ksu54_compat "$G"; then
+    sed -i "1i #include <linux/ksu54_compat.h>" "$G"
+  fi
+  echo "hdr fixed: ${G#$KDIR/}"
+done
 echo "=== [SUSFS] step 4b: TWA_* enum is 5.10+, task_work_add takes bool on 5.4 ==="
 for T in "$SUDIR/manager/dynamic_manager.c" \
          "$SUDIR/policy/allowlist.c" \
