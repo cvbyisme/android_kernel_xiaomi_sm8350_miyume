@@ -32,9 +32,7 @@ jobs:
           echo "FinaSU HEAD: $(git -C kernel/KernelSU rev-parse --short HEAD)"
 
       - name: Integrate SUSFS 5.4 into FinaSU kernel tree
-        env:
-          KERNEL_DIR: ${{ github.workspace }}/kernel
-        run: bash "$GITHUB_WORKSPACE/.github/scripts/susfs-setup.sh"
+        run: bash kernel/.github/scripts/susfs-setup.sh
 
       - name: Free disk space
         run: |
