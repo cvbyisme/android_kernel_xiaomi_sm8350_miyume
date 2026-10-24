@@ -2,7 +2,9 @@
 set -euo pipefail
 
 CHERRY="$HOME/susfs-k54"
-KDIR="$(pwd)"
+KDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$KDIR"
+echo "KERNEL_DIR=$KDIR"
 
 echo "=== [SUSFS] fetching dev-sm8350/susfs4ksu@k5.4 ==="
 rm -rf "$CHERRY"
