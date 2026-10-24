@@ -152,6 +152,10 @@ fi
 SUDIR="$KDIR/KernelSU/kernel"
 [ -d "$SUDIR" ] || { echo "::error::FinaSU tree not found at $SUDIR"; exit 1; }
 F="$SUDIR/feature/sucompat.c"
+if [ -f "$F" ] && grep -q pgtable.h "$F"; then
+  sed -i "s|^#include <linux/pgtable.h>$|#include <linux/ksu54_compat.h>|" "$F"
+  echo "sucompat.c: pgtable -> ksu54_compat"
+fi
 for G in "$SUDIR/runtime/ksud_integration.c" \
          "$SUDIR/sulog/event.c" \
          "$SUDIR/feature/adb_root.c" \
