@@ -184,6 +184,64 @@ for G in "$SUDIR/runtime/ksud_integration.c" \
   fi
 done
 
+echo "=== [SUSFS] step 5: 5.4 has no seccomp syscall cache (added in 5.9) ==="
+SCC="$SUDIR/infra/seccomp_cache.c"
+if [ -f "$SCC" ] && ! grep -q ksu54_seccomp_stub "$SCC"; then
+cat > "$SCC" <<'SCCEOF'
+/* ksu54_seccomp_stub: Linux 5.4 has no seccomp syscall bitmap cache
+ * (that landed in 5.9 together with struct action_cache). FinaSU only uses
+ * these to pre-allow __NR_reboot for the manager uid; on 5.4 the syscall is
+ * simply evaluated by the normal filter path, so both helpers are no-ops.
+ */
+#include <linux/fs.h>
+#include <linux/seccomp.h>
+#include "klog.h" // IWYU pragma: keep
+#include "infra/seccomp_cache.h"
+
+void ksu_seccomp_clear_cache(struct seccomp_filter *filter, int nr)
+{
+(void)filter;
+(void)nr;
+}
+
+void ksu_seccomp_allow_cache(struct seccomp_filter *filter, int nr)
+{
+(void)filter;
+(void)nr;
+}
+SCCEOF
+echo "seccomp_cache.c replaced with 5.4 no-op stub"
+fi
+
+echo "=== [SUSFS] step 5: 5.4 has no seccomp syscall cache (added in 5.9) ==="
+SCC="$SUDIR/infra/seccomp_cache.c"
+if [ -f "$SCC" ] && ! grep -q ksu54_seccomp_stub "$SCC"; then
+cat > "$SCC" <<'SCCEOF'
+/* ksu54_seccomp_stub: Linux 5.4 has no seccomp syscall bitmap cache
+ * (that landed in 5.9 together with struct action_cache). FinaSU only uses
+ * these to pre-allow __NR_reboot for the manager uid; on 5.4 the syscall is
+ * simply evaluated by the normal filter path, so both helpers are no-ops.
+ */
+#include <linux/fs.h>
+#include <linux/seccomp.h>
+#include "klog.h" // IWYU pragma: keep
+#include "infra/seccomp_cache.h"
+
+void ksu_seccomp_clear_cache(struct seccomp_filter *filter, int nr)
+{
+(void)filter;
+(void)nr;
+}
+
+void ksu_seccomp_allow_cache(struct seccomp_filter *filter, int nr)
+{
+(void)filter;
+(void)nr;
+}
+SCCEOF
+echo "seccomp_cache.c replaced with 5.4 no-op stub"
+fi
+
 echo "=== [SUSFS] verification ==="
 grep -n 'susfs_set_current_proc_no_su\|for_zygote_next' include/linux/susfs_def.h
 grep -n '(void)zygote_next' "$SH" || true
