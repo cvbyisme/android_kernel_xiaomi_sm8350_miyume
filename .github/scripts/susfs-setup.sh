@@ -296,6 +296,21 @@ s = open(P, encoding="utf-8").read()
 import re
 s = re.sub(r"void ksu_destroy_sepolicy\(struct selinux_policy \*pol\)\s*\{.*?\n\}\n", "", s, count=1, flags=re.S)
 s = re.sub(r"struct selinux_policy \*ksu_dup_sepolicy\(struct selinux_policy \*old_pol\)\s*\{.*?\n\}\n", "", s, count=1, flags=re.S)
+a = s.find('static bool add_filename_trans(struct policydb *db', s.find('static bool add_genfscon('))
+if a != -1:
+    b = s.find('static bool add_genfscon(', a)
+    if b != -1:
+        stub = ('#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0)' + chr(10) + s[a:b] +
+            '#else' + chr(10) +
+            'static bool add_filename_trans(struct policydb *db, const char *s, const char *t, const char *c,' + chr(10) +
+            '                               const char *d, const char *o)' + chr(10) +
+            '{' + chr(10) +
+            '    (void)o;' + chr(10) +
+            '    return add_type_rule(db, s, t, c, d, AVTAB_TRANSITION);' + chr(10) +
+            '}' + chr(10) +
+            '#endif' + chr(10))
+        s = s[:a] + stub + s[b:]
+        print('sepolicy.c: add_filename_trans guarded for 5.4')
 s += ADD
 s += chr(10) + "/* ksu54_sepolicy_backport appplied */" + chr(10)
 open(P, "w", encoding="utf-8").write(s)
