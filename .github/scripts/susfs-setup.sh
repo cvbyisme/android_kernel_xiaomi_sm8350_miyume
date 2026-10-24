@@ -121,6 +121,21 @@ return ret ? -EFAULT : 0;
 #define copy_to_user_nofault(dst, src, n) \
 ksu54_copy_to_user_nofault((void __user *)(dst), (const void *)(src), (size_t)(n))
 #endif /* < 5.8 */
+/* __p4d_to_phys(): p4d is folded away below Linux 5.8 (5-level fixup) */
+#ifndef __p4d_to_phys
+#define __p4d_to_phys(p4d) __pgd_to_phys(p4d)
+#endif
+/* copy_to_kernel_nofault() appeared in Linux 5.8 */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0)
+static inline int ksu54_copy_to_kernel_nofault(void *dst, const void *src,
+					       size_t size)
+{
+	return copy_from_kernel_nofault(dst, src, size);
+}
+#define copy_to_kernel_nofault(dst, src, n) \
+	ksu54_copy_to_kernel_nofault((void *)(dst), (const void *)(src), (size_t)(n))
+#endif /* < 5.8 */
+
 #endif /* _KSU54_COMPAT_H */
 C54
 echo "written include/linux/ksu54_compat.h"
@@ -160,7 +175,8 @@ for G in "$SUDIR/runtime/ksud_integration.c" \
          "$SUDIR/sulog/event.c" \
          "$SUDIR/feature/adb_root.c" \
          "$SUDIR/hook/syscall_event_bridge.c" \
-         "$SUDIR/preinit/preinit.c"; do
+         "$SUDIR/preinit/preinit.c" \
+         "$SUDIR/hook/arm64/patch_memory.c"; do
   [ -f "$G" ] || continue
   if ! grep -q ksu54_compat "$G"; then
     sed -i "1i #include <linux/ksu54_compat.h>" "$G"
