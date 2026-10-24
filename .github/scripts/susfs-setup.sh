@@ -273,6 +273,14 @@ if 'KSU54_POLICY_FIELD' not in s:
     s = s.replace('mutex_unlock(&selinux_state.policy_mutex);', 'KSU_POLICY_UNLOCK();')
     s = s.replace('rcu_dereference_protected(selinux_state.policy, lockdep_is_held(&selinux_state.policy_mutex));', 'KSU_POLICY_GET();')
     s = s.replace('rcu_assign_pointer(selinux_state.policy, pol);', 'KSU_POLICY_SET(pol);')
+    # 5.4 keeps sidtab/latest_granting in selinux_state.ss, not in selinux_policy;
+    # backup_sepolicy is only consumed by selinux_hide, so keep it policydb-only.
+    a = s.find('backup_sepolicy->sidtab = kzalloc')
+    if a != -1:
+        b = s.find('    pol = ksu_dup_sepolicy(old_pol);', a)
+        if b != -1:
+            s = s[:a] + '        (void)0;' + chr(10) + '    }' + chr(10) + s[b:]
+            print('rules.c: dropped 5.7+ sidtab backup block')
     io.open(r, 'w', encoding='utf-8').write(s)
     print('rules.c: policy field access guarded for 5.4')
 SEL54EOF
@@ -293,6 +301,15 @@ s += chr(10) + "/* ksu54_sepolicy_backport appplied */" + chr(10)
 open(P, "w", encoding="utf-8").write(s)
 print("sepolicy.c: v5.7 helpers replaced with 5.4 policydb backport")
 SECPEOF
+fi
+echo "=== [SUSFS] step 4e: selinux_hide needs 5.7+ selinux_policy API, stub on 5.4 ==="
+SIH="$SUDIR/feature/selinux_hide.c"
+if [ -f "$SIH" ] && ! grep -q ksu54_selinux_hide_stub "$SIH"; then
+python3 - <<'SIHEOF'
+import base64
+open("KernelSU/kernel/feature/selinux_hide.c", "w").write(base64.b64decode("I2lmIExJTlVYX1ZFUlNJT05fQ09ERSA8IEtFUk5FTF9WRVJTSU9OKDUsIDcsIDApCi8qIGtzdTU0X3NlbGludXhfaGlkZV9zdHViOiBGaW5hU1Ugc2VsaW51eF9oaWRlIHJlYnVpbGRzIFNFTGludXggcG9saWN5IHdpdGgKICogc2VjdXJpdHlfY29udGV4dF90b19zaWRfd2l0aF9wb2xpY3koKS9zZWN1cml0eV9jb21wdXRlX2F2X3VzZXJfd2l0aF9wb2xpY3koKSwKICogd2hpY2ggb25seSBhcHBlYXJlZCB3aXRoIHRoZSA1Ljcgc2VsaW51eF9wb2xpY3kgc3BsaXQuIE9uIDUuNCB0aGUgZmVhdHVyZSBpcwogKiBhIG5vLW9wOyBTVVNGUyBoaWRpbmcgaXRzZWxmIGlzIG5vdCBhZmZlY3RlZC4KICovCiNpbmNsdWRlICJzZWxpbnV4X2hpZGUuaCIKI2luY2x1ZGUgPGxpbnV4L3ZlcnNpb24uaD4KI2luY2x1ZGUgInNlbGludXgvc2Vwb2xpY3kuaCIKI2luY2x1ZGUgImtzdS5oIgojaW5jbHVkZSAia2xvZy5oIgpib29sIGtzdV9zZWxpbnV4X2hpZGVfZW5hYmxlZCA9IGZhbHNlOwpib29sIGtzdV9zZWxpbnV4X2hpZGVfcnVubmluZyA9IGZhbHNlOwpzc2l6ZV90IG15X3dyaXRlX2NvbnRleHQoc3RydWN0IGZpbGUgKmZpbGUsIGNoYXIgKmJ1Ziwgc2l6ZV90IHNpemUpCnsKICAgICh2b2lkKWZpbGU7CiAgICAodm9pZClidWY7CiAgICByZXR1cm4gc2l6ZTsKfQpzc2l6ZV90IG15X3dyaXRlX2FjY2VzcyhzdHJ1Y3QgZmlsZSAqZmlsZSwgY2hhciAqYnVmLCBzaXplX3Qgc2l6ZSkKewogICAgKHZvaWQpZmlsZTsKICAgICh2b2lkKWJ1ZjsKICAgIHJldHVybiBzaXplOwp9CnZvaWQga3N1X3NlbGludXhfaGlkZV9pbml0KHZvaWQpCnsKICAgIHByX2luZm8oInNlbGludXhfaGlkZTogc3R1YmJlZCBvbiA1LjRcbiIpOwp9CnZvaWQga3N1X3NlbGludXhfaGlkZV9leGl0KHZvaWQpCnsKfQp2b2lkIGtzdV9zZWxpbnV4X2hpZGVfZHJvcF9iYWNrdXBfaWZfdW51c2VkKHZvaWQpCnsKICAgIGlmIChiYWNrdXBfc2Vwb2xpY3kpIHsKICAgICAgICBrc3VfZGVzdHJveV9zZXBvbGljeShiYWNrdXBfc2Vwb2xpY3kpOwogICAgICAgIGJhY2t1cF9zZXBvbGljeSA9IE5VTEw7CiAgICB9Cn0Kdm9pZCBrc3Vfc2VsaW51eF9oaWRlX2hhbmRsZV9zZWNvbmRfc3RhZ2Uodm9pZCkKewp9CnZvaWQga3N1X3NlbGludXhfaGlkZV9oYW5kbGVfcG9zdF9mc19kYXRhKHZvaWQpCnsKfQojZW5kaWYK").decode())
+print("selinux_hide.c: 5.4 no-op stub")
+SIHEOF
 fi
 echo "=== [SUSFS] step 5: 5.4 has no seccomp syscall cache (added in 5.9) ==="
 SCC="$SUDIR/infra/seccomp_cache.c"
