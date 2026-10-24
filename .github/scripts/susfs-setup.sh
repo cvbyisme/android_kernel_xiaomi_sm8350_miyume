@@ -184,6 +184,16 @@ for G in "$SUDIR/runtime/ksud_integration.c" \
   fi
 done
 
+echo "=== [SUSFS] step 4b: TWA_* enum is 5.10+, task_work_add takes bool on 5.4 ==="
+for T in "$SUDIR/manager/dynamic_manager.c" \
+         "$SUDIR/policy/allowlist.c" \
+         "$SUDIR/supercall/supercall.c"; do
+  [ -f "$T" ] || continue
+  if grep -q 'TWA_RESUME\|TWA_NONE\|TWA_SIGNAL' "$T"; then
+    sed -i 's/, TWA_RESUME)/, true)/g; s/, TWA_NONE)/, false)/g; s/, TWA_SIGNAL)/, true)/g' "$T"
+    echo "TWA_* -> bool: ${T#$KDIR/}"
+  fi
+done
 echo "=== [SUSFS] step 5: 5.4 has no seccomp syscall cache (added in 5.9) ==="
 SCC="$SUDIR/infra/seccomp_cache.c"
 if [ -f "$SCC" ] && ! grep -q ksu54_seccomp_stub "$SCC"; then
