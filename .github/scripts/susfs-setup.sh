@@ -60,12 +60,12 @@ cat > include/linux/ksu54_compat.h <<'C54'
 #include <linux/highmem.h>
 #include <linux/errno.h>
 #include <linux/string.h>
-/* 5.4 does not have <linux/static_key.h>/<linux/task_work.h>/<linux/hex.h>;
- * their declarations all live in <linux/jump_label.h>, <linux/sched/task.h>
- * and <linux/kernel.h> respectively on 5.4.
+/* This vendor 5.4 tree still ships <linux/task_work.h> and
+ * <linux/static_key.h>, but <linux/minmax.h> (5.10+) and <linux/hex.h>
+ * (6.2+) are absent, so their macros are re-supplied here.
  */
+#include <linux/task_work.h>
 #include <linux/jump_label.h>
-#include <linux/sched/task.h>
 #include <linux/kernel.h>
 /* <linux/pgtable.h> only exists since Linux 5.8 */
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0)
@@ -209,13 +209,10 @@ for G in "$SUDIR/runtime/ksud_integration.c" \
   fi
 done
 
-echo "=== [SUSFS] step 4a-hdr: strip 5.10+/6.x-only <linux/*.h> includes (minmax/hex/static_key/task_work) ==="
-for G in $(grep -rl "#include <linux/minmax.h>\|#include <linux/hex.h>\|#include <linux/static_key.h>\|#include <linux/task_work.h>" "$SUDIR" --include=*.c --include=*.h 2>/dev/null); do
-  sed -i "/^#include <linux\/minmax.h>$/d; /^#include <linux\/hex.h>$/d; /^#include <linux\/static_key.h>$/d; /^#include <linux\/task_work.h>$/d" "$G"
-  if ! grep -q ksu54_compat "$G"; then
-    sed -i "1i #include <linux/ksu54_compat.h>" "$G"
-  fi
-  echo "hdr fixed: ${G#$KDIR/}"
+echo "=== [SUSFS] step 4a-hdr: strip <linux/minmax.h>/<linux/hex.h> (absent in 5.4) ==="
+for G in $(grep -rl "#include <linux/minmax.h>\|#include <linux/hex.h>" "$SUDIR" --include=*.c --include=*.h 2>/dev/null); do
+  sed -i "/^#include <linux\/minmax.h>$/d; /^#include <linux\/hex.h>$/d" "$G"
+  echo "hdr stripped: ${G#$KDIR/}"
 done
 echo "=== [SUSFS] step 4b: TWA_* enum is 5.10+, task_work_add takes bool on 5.4 ==="
 for T in "$SUDIR/manager/dynamic_manager.c" \
