@@ -455,6 +455,46 @@ sys.argv = ['kum_fix', sys.argv[1]]
 exec(compile(src, '<kum_fix>', 'exec'))
 KUMEOF
 fi
+echo "=== [SUSFS] step 8: satisfy ksu_handle_devpts referenced by fs/devpts/inode.c ==="
+# The vendor tree already carries the KernelSU/ReSukiSU devpts hook:
+#   #ifdef CONFIG_KSU
+#   extern int ksu_handle_devpts(struct inode *);
+#   ksu_handle_devpts(dentry->d_inode);
+#   #endif
+# FinaSU documents this hook but ships no implementation, so the link step
+# dies with "undefined symbol: ksu_handle_devpts". FinaSU's own docs mark the
+# function as dead code on modern trees, so provide the no-op definition here
+# instead of ripping the call out of fs/devpts/inode.c.
+SCT="$SUDIR/feature/sucompat.c"
+if [ -f "$SCT" ] && ! grep -q ksu_handle_devpts "$SCT"; then
+python3 - "$SCT" <<'DEVPEOF'
+import sys
+p = sys.argv[1]
+s = open(p, encoding='utf-8').read()
+add = (
+    chr(10) +
+    '/* ksu54_devpts_stub: the vendor fs/devpts/inode.c still calls this hook' + chr(10) +
+    ' * (carried over from the ReSukiSU era patch). FinaSU has no' + chr(10) +
+    ' * implementation and treats it as dead code, so define a no-op that the' + chr(10) +
+    ' * linker can satisfy. ' + chr(10) +
+    ' */' + chr(10) +
+    'int __maybe_unused ksu_handle_devpts(struct inode *inode)' + chr(10) +
+    '{' + chr(10) +
+    '    (void)inode;' + chr(10) +
+    '    return 0;' + chr(10) +
+    '}' + chr(10)
+)
+s = s + add
+open(p, 'w', encoding='utf-8').write(s)
+print('sucompat.c: ksu_handle_devpts no-op stub appended')
+DEVPEOF
+fi
+echo "=== [SUSFS] step 8b: guard fs/devpts/inode.c hook call behind the stub ==="
+DPT="$KDIR/fs/devpts/inode.c"
+if [ -f "$DPT" ] && grep -q ksu_handle_devpts "$DPT"; then
+  echo "fs/devpts/inode.c keeps ksu_handle_devpts call, stub provides the symbol"
+fi
+
 echo "=== [SUSFS] verification ==="
 grep -n 'susfs_set_current_proc_no_su\|for_zygote_next' include/linux/susfs_def.h
 grep -n '(void)zygote_next' "$SH" || true
